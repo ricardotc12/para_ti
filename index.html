@@ -695,15 +695,25 @@ function buildGrid(id,items){
       /* VIDEO: si la URL es de Drive /preview → usar iframe */
       div.classList.add('video-item');
       if(item.src.includes('/preview')){
-        /* iframe para Drive embeds */
+        /* Drive embed: iframe carga al hacer clic para evitar bloqueo */
+        const [rv,rh2]=(item.ratio||'4/3').split('/').map(Number);
+        const pvt=((rh2/rv)*100).toFixed(2);
+        div.classList.add('video-item');
         div.innerHTML=`
-          <div style="position:relative;width:100%;overflow:hidden;aspect-ratio:${item.ratio||'4/3'}">
-            <iframe src="${item.src}"
-              style="position:absolute;inset:0;width:100%;height:100%;border:0;"
-              allow="autoplay; encrypted-media"
-              allowfullscreen loading="lazy"></iframe>
+          <div class="drive-video-wrap" style="position:relative;width:100%;padding-top:${pvt}%;background:#1a0f12;cursor:pointer" data-src="${item.src}">
+            <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem">
+              <div style="width:56px;height:56px;border-radius:50%;background:var(--rose);display:flex;align-items:center;justify-content:center;font-size:1.4rem;box-shadow:0 0 24px rgba(201,114,122,.5)">▶</div>
+              <span style="font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);opacity:.7">${item.caption||'Ver video'}</span>
+            </div>
           </div>
           <div class="photo-item-overlay">${item.caption||''}</div>`;
+        div.querySelector('.drive-video-wrap').addEventListener('click', function(){
+          const wrap = this;
+          wrap.innerHTML = `<iframe src="${item.src}&autoplay=1"
+            style="position:absolute;inset:0;width:100%;height:100%;border:0;"
+            allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+          wrap.style.cursor='default';
+        });
       } else {
         /* video nativo con autoplay muted */
         div.innerHTML=`
@@ -746,18 +756,26 @@ function buildFinalSection(){
 
   if(cfg.videoSrc){
     if(cfg.videoSrc.includes('/preview')){
-      /* Drive embed con iframe */
+      /* Drive embed: clic para cargar el iframe */
       container.innerHTML=`
-        <div class="final-video-wrap" style="position:relative;min-height:56vw;max-height:85vh">
-          <iframe src="${cfg.videoSrc}"
-            style="position:absolute;inset:0;width:100%;height:100%;border:0;object-fit:cover;"
-            allow="autoplay; encrypted-media" allowfullscreen loading="lazy"></iframe>
+        <div class="final-video-wrap" style="position:relative;min-height:56vw;max-height:85vh;cursor:pointer" id="final-video-placeholder">
+          <div style="position:absolute;inset:0;background:linear-gradient(160deg,#3d1420,#0d0709);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2rem">
+            <div style="width:72px;height:72px;border-radius:50%;background:var(--rose);display:flex;align-items:center;justify-content:center;font-size:1.8rem;box-shadow:0 0 40px rgba(201,114,122,.6)">▶</div>
+            <div style="font-family:var(--ff-d);font-size:clamp(1.4rem,4vw,2.5rem);font-style:italic;color:var(--cream)">${cfg.titulo||'Para siempre'}</div>
+            <div style="font-size:.7rem;letter-spacing:.25em;text-transform:uppercase;color:var(--gold);opacity:.7">Toca para reproducir</div>
+          </div>
+        </div>`;
+      document.getElementById('final-video-placeholder').addEventListener('click', function(){
+        this.style.cursor='default';
+        this.innerHTML=`<iframe src="${cfg.videoSrc}&autoplay=1"
+          style="position:absolute;inset:0;width:100%;height:100%;border:0;"
+          allow="autoplay; encrypted-media" allowfullscreen></iframe>
           <div class="final-video-overlay" style="pointer-events:none"></div>
           <div class="final-video-content">
             <div class="final-video-title">${cfg.titulo||'Para siempre'}</div>
             <div class="final-video-sub">${cfg.subtitulo||''}</div>
-          </div>
-        </div>`;
+          </div>`;
+      });
     } else {
       /* Video nativo (archivo local o URL directa) */
       container.innerHTML=`
@@ -790,8 +808,8 @@ function buildFinalSection(){
 
 /* ════════════════════════════════════
    M Ú S I C A  D E  F O N D O
-   — La canción arranca al primer clic
-     (clic en el sobre = primer gesto)
+   — src se precarga al abrir la página
+   — .play() se dispara en el clic del sobre
 ════════════════════════════════════ */
 const audio=document.getElementById('audio-player');
 const playerBar=document.getElementById('player-bar');
@@ -800,29 +818,32 @@ const playerPBtn=document.getElementById('player-play-btn');
 const progFill=document.getElementById('progress-fill');
 const volBar=document.getElementById('vol-bar');
 let isPlaying=false;
-let musicReady=false;
 
-/* Inicializar src de audio */
-function initMusic(){
+/* Precargar src apenas carga la página — SIN reproducir */
+(function preloadAudio(){
   const src = CONFIG.songBase64 || CONFIG.songSrc;
-  if(src){
-    audio.src = src;
-    audio.volume = parseFloat(volBar.value);
-    showPlayerBar();
-    musicReady = true;
-  }
-  buildLocalLoader();
-}
+  if(!src) return;
+  audio.src = src;
+  audio.volume = 0.5;
+  audio.load();
+})();
 
-/* Intentar reproducir — se llama desde el clic del sobre */
+/* Se llama en el clic del sobre — gesto de usuario confirmado */
 function tryPlayMusic(){
-  if(!musicReady) return;
   audio.play().then(()=>{
     isPlaying=true;
     updatePlayState();
+    showPlayerBar();
   }).catch(()=>{
-    /* Autoplay bloqueado — el usuario puede usar el player bar */
+    showPlayerBar();
   });
+}
+
+/* Sincroniza UI del player cuando se muestra el portal */
+function initMusic(){
+  const src = CONFIG.songBase64 || CONFIG.songSrc;
+  if(src) showPlayerBar();
+  buildLocalLoader();
 }
 
 function showPlayerBar(){
